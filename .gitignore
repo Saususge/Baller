@@ -420,6 +420,7 @@ FodyWeavers.xsd
 # CMake build directories
 build/
 out/
+CMakeUserPresets.json
 
 # Vscode workspace configuration directory
 .vscode

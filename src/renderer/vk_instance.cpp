@@ -3,9 +3,9 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace tiny {
+namespace baller {
 
-// 기본 유효성 검사 레이어
+// Default validation layers.
 const std::vector<const char *> VulkanInstance::s_validationLayers = {
     "VK_LAYER_KHRONOS_validation"};
 
@@ -16,59 +16,67 @@ bool VulkanInstance::create(const std::string &appName,
                             bool enableValidation) {
   m_validationEnabled = enableValidation;
 
-  // 유효성 검사 레이어 확인
+  // SDK/header support does not imply that the installed loader supports 1.4.
+  uint32_t loaderVersion = VK_API_VERSION_1_0;
+  auto enumerateInstanceVersion = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
+      vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceVersion"));
+  if (enumerateInstanceVersion != nullptr &&
+      enumerateInstanceVersion(&loaderVersion) != VK_SUCCESS) {
+    std::cerr << "Failed to query the Vulkan loader version." << std::endl;
+    return false;
+  }
+  if (loaderVersion < kRequiredVulkanVersion) {
+    std::cerr << "baller requires a Vulkan 1.4 or newer loader. "
+              << "Check your graphics driver. Current version: "
+              << VK_API_VERSION_MAJOR(loaderVersion) << "."
+              << VK_API_VERSION_MINOR(loaderVersion) << std::endl;
+    return false;
+  }
+
+  // Check validation layer availability.
   if (m_validationEnabled && !checkValidationLayerSupport()) {
     std::cerr
-        << "경고: 유효성 검사 레이어를 사용할 수 없습니다. 비활성화합니다."
+        << "Warning: validation layers are unavailable. Validation is disabled."
         << std::endl;
     m_validationEnabled = false;
   }
 
-  // 앱 정보
+  // Application and engine metadata.
   VkApplicationInfo appInfo = {};
   appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   appInfo.pApplicationName = appName.c_str();
-  appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-  appInfo.pEngineName = "Tiny42D";
-  appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-  appInfo.apiVersion = VK_API_VERSION_1_2;
+  appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
+  appInfo.pEngineName = "baller";
+  appInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
+  appInfo.apiVersion = kRequiredVulkanVersion;
 
-  // 확장 목록 구성
+  // Collect the required instance extensions.
   std::vector<const char *> extensions(requiredExtensions);
   if (m_validationEnabled) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
 
-#if defined(__APPLE__)
-  extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-  extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-#endif
-
-  // 사용 가능한 확장 출력
+  // List available instance extensions for diagnostics.
   uint32_t extensionCount = 0;
   vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
   std::vector<VkExtensionProperties> availableExtensions(extensionCount);
   vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
                                          availableExtensions.data());
 
-  std::cout << "사용 가능한 Vulkan 확장 (" << extensionCount
-            << "개):" << std::endl;
+  std::cout << "Available Vulkan extensions (" << extensionCount
+            << "):" << std::endl;
   for (const auto &ext : availableExtensions) {
     std::cout << "  " << ext.extensionName << std::endl;
   }
 
-  // 인스턴스 생성 정보
+  // Configure instance creation.
   VkInstanceCreateInfo createInfo = {};
   createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   createInfo.pApplicationInfo = &appInfo;
   createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
   createInfo.ppEnabledExtensionNames = extensions.data();
 
-#if defined(__APPLE__)
-  createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
-
-  // Debug Messenger 생성 정보 (인스턴스 생성/파괴 시에도 디버그 메시지 수신)
+  // Capture validation messages during instance creation and destruction.
   VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {};
   if (m_validationEnabled) {
     createInfo.enabledLayerCount =
@@ -92,16 +100,16 @@ bool VulkanInstance::create(const std::string &appName,
     createInfo.pNext = nullptr;
   }
 
-  // VkInstance 생성
+  // Create the Vulkan instance.
   VkResult result = vkCreateInstance(&createInfo, nullptr, &m_instance);
   if (result != VK_SUCCESS) {
-    std::cerr << "VkInstance 생성 실패! 에러 코드: " << result << std::endl;
+    std::cerr << "Failed to create VkInstance. Error code: " << result << std::endl;
     return false;
   }
 
-  std::cout << "VkInstance 생성 완료" << std::endl;
+  std::cout << "VkInstance created." << std::endl;
 
-  // Debug Messenger 설정
+  // Set up the debug messenger.
   if (m_validationEnabled) {
     setupDebugMessenger();
   }
@@ -114,7 +122,7 @@ void VulkanInstance::destroy() {
     destroyDebugMessenger();
     vkDestroyInstance(m_instance, nullptr);
     m_instance = VK_NULL_HANDLE;
-    std::cout << "VkInstance 파괴 완료" << std::endl;
+    std::cout << "VkInstance destroyed." << std::endl;
   }
 }
 
@@ -133,7 +141,7 @@ bool VulkanInstance::checkValidationLayerSupport() const {
       }
     }
     if (!found) {
-      std::cerr << "유효성 검사 레이어 없음: " << layerName << std::endl;
+      std::cerr << "Validation layer unavailable: " << layerName << std::endl;
       return false;
     }
   }
@@ -152,19 +160,19 @@ void VulkanInstance::setupDebugMessenger() {
   createInfo.pfnUserCallback = debugCallback;
   createInfo.pUserData = nullptr;
 
-  // vkCreateDebugUtilsMessengerEXT는 확장 함수이므로 직접 로드
+  // Load the extension entry point through the instance.
   auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
       vkGetInstanceProcAddr(m_instance, "vkCreateDebugUtilsMessengerEXT"));
 
   if (func != nullptr) {
     VkResult result = func(m_instance, &createInfo, nullptr, &m_debugMessenger);
     if (result == VK_SUCCESS) {
-      std::cout << "Vulkan Debug Messenger 활성화" << std::endl;
+      std::cout << "Vulkan debug messenger enabled." << std::endl;
     } else {
-      std::cerr << "Debug Messenger 생성 실패" << std::endl;
+      std::cerr << "Failed to create the debug messenger." << std::endl;
     }
   } else {
-    std::cerr << "vkCreateDebugUtilsMessengerEXT 함수를 찾을 수 없음"
+    std::cerr << "Could not load vkCreateDebugUtilsMessengerEXT."
               << std::endl;
   }
 }
@@ -198,4 +206,4 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanInstance::debugCallback(
   return VK_FALSE;
 }
 
-} // namespace tiny
+} // namespace baller

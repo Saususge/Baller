@@ -5,41 +5,43 @@
 #include <vulkan/vulkan.h>
 
 
-namespace tiny {
+namespace baller {
 
-/// VkInstance 생성 및 유효성 검사 레이어 관리
+inline constexpr uint32_t kRequiredVulkanVersion = VK_API_VERSION_1_4;
+
+/// Owns a Vulkan instance and its validation messenger.
 class VulkanInstance {
 public:
   VulkanInstance() = default;
   ~VulkanInstance();
 
-  // 복사/이동 금지
+  // Non-copyable and non-movable: this object owns Vulkan handles.
   VulkanInstance(const VulkanInstance &) = delete;
   VulkanInstance &operator=(const VulkanInstance &) = delete;
 
-  /// VkInstance를 생성합니다
-  /// @param appName 애플리케이션 이름
-  /// @param requiredExtensions 필수 확장 목록 (플랫폼별 Surface 확장 포함)
-  /// @param enableValidation 유효성 검사 레이어 활성화 여부
+  /// Create the Vulkan instance.
+  /// @param appName Application name.
+  /// @param requiredExtensions Required instance extensions, including platform surface extensions.
+  /// @param enableValidation Whether to enable validation layers.
   bool create(const std::string &appName,
               const std::vector<const char *> &requiredExtensions,
               bool enableValidation = true);
 
-  /// 리소스 정리
+  /// Release owned Vulkan resources.
   void destroy();
 
   VkInstance getInstance() const { return m_instance; }
   bool isValidationEnabled() const { return m_validationEnabled; }
 
 private:
-  /// 유효성 검사 레이어 지원 여부 확인
+  /// Check whether all requested validation layers are available.
   bool checkValidationLayerSupport() const;
 
-  /// Debug Messenger 설정
+  /// Set up the debug messenger.
   void setupDebugMessenger();
   void destroyDebugMessenger();
 
-  /// Vulkan 디버그 콜백
+  /// Forward Vulkan validation messages to the application log.
   static VKAPI_ATTR VkBool32 VKAPI_CALL
   debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                 VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -53,4 +55,4 @@ private:
   static const std::vector<const char *> s_validationLayers;
 };
 
-} // namespace tiny
+} // namespace baller

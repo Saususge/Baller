@@ -4,7 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace tiny {
+namespace baller {
 
 class PlatformWin32 : public Platform {
 public:
@@ -20,22 +20,22 @@ public:
     wc.lpfnWndProc = WndProc;
     wc.hInstance = GetModuleHandle(nullptr);
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.lpszClassName = L"Tiny42DEngine";
+    wc.lpszClassName = L"baller";
 
     if (!RegisterClassEx(&wc)) {
-      std::cerr << "윈도우 클래스 등록 실패!" << std::endl;
+      std::cerr << "Failed to register the window class." << std::endl;
       return false;
     }
     m_wndClass = wc;
     m_registered = true;
 
-    // 클라이언트 영역 크기에 맞게 윈도우 크기 조정
+    // Adjust the window bounds to preserve the requested client area.
     RECT wr = {0, 0, static_cast<LONG>(config.width),
                static_cast<LONG>(config.height)};
     DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
     AdjustWindowRect(&wr, style, FALSE);
 
-    // 화면 중앙에 배치
+    // Center the window on the primary display.
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int posX = (screenW - (wr.right - wr.left)) / 2;
@@ -46,14 +46,14 @@ public:
                           nullptr, wc.hInstance, nullptr);
 
     if (!m_hwnd) {
-      std::cerr << "윈도우 생성 실패!" << std::endl;
+      std::cerr << "Failed to create the window." << std::endl;
       return false;
     }
 
     ShowWindow(m_hwnd, SW_SHOWDEFAULT);
     UpdateWindow(m_hwnd);
 
-    std::cout << "Win32 윈도우 생성 완료: " << config.width << "x"
+    std::cout << "Win32 window created: " << config.width << "x"
               << config.height << std::endl;
     return true;
   }
@@ -111,10 +111,10 @@ public:
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     if (vkCreateWin32SurfaceKHR(instance, &createInfo, nullptr, &surface) !=
         VK_SUCCESS) {
-      throw std::runtime_error("Win32 Vulkan Surface 생성 실패!");
+      throw std::runtime_error("Failed to create the Win32 Vulkan surface.");
     }
 
-    std::cout << "Win32 Vulkan Surface 생성 완료" << std::endl;
+    std::cout << "Win32 Vulkan surface created." << std::endl;
     return surface;
   }
 
@@ -133,7 +133,7 @@ private:
       return 0;
     case WM_SYSCOMMAND:
       if ((wParam & 0xfff0) == SC_KEYMENU)
-        return 0; // ALT 메뉴 비활성화
+        return 0; // Disable the ALT menu shortcut.
       break;
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
@@ -146,11 +146,11 @@ private:
   uint32_t m_height = 0;
 };
 
-// Platform::create() - Win32 구현
+// Create the Win32 platform implementation.
 std::unique_ptr<Platform> Platform::create() {
   return std::make_unique<PlatformWin32>();
 }
 
-} // namespace tiny
+} // namespace baller
 
 #endif // _WIN32
