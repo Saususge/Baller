@@ -1,77 +1,77 @@
+#include <cstdlib>
+#include <exception>
 #include <iostream>
-#include <memory>
+#include <limits>
+#include <algorithm>
 
 #include "platform/platform.hpp"
+#include "renderer/vk_device.hpp"
 #include "renderer/vk_instance.hpp"
 
+vk::Extent2D chooseSwapExtent(vk::SurfaceCapabilitiesKHR const &capabilities,
+                              const baller::Platform &platform)
+{
+    if (capabilities.currentExtent.width !=
+        std::numeric_limits<uint32_t>::max())
+        return capabilities.currentExtent;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    platform.getFramebufferSize(width, height);
+    return vk::Extent2D{
+        std::clamp<uint32_t>(width, capabilities.minImageExtent.width,
+                            capabilities.maxImageExtent.width),
+        std::clamp<uint32_t>(height, capabilities.minImageExtent.height,
+                            capabilities.maxImageExtent.height)
+    };
+}
+
+// Creating swapchain
+void createSwapChain(const vk::raii::PhysicalDevice &physicalDevice,
+                     const vk::raii::SurfaceKHR &surface,
+                     const baller::Platform &platform)
+{
+    const auto surfaceCapabilities =
+        physicalDevice.getSurfaceCapabilitiesKHR(*surface);
+    vk::Extent2D swapChainExtent =
+        chooseSwapExtent(surfaceCapabilities, platform);
+}
+
 int main() {
-#ifdef _WIN32
-  // Use UTF-8 for Windows console output.
-  SetConsoleOutputCP(CP_UTF8);
-#endif
+	// Use UTF-8 for Windows console output.
+	SetConsoleOutputCP(CP_UTF8);
 
-  // =============================================
-  // 1. Create the window.
-  // =============================================
-  auto platform = baller::Platform::create();
+	try {
+		// Declare parents first so child resources are destroyed before them.
+		auto platform = baller::Platform::create();
+		baller::WindowConfig windowConfig;
+		windowConfig.width = 1280;
+		windowConfig.height = 960;
+		if (!platform->createWindow(windowConfig)) {
+			std::cerr << "Failed to create the window.\n";
+			return EXIT_FAILURE;
+		}
 
-  baller::WindowConfig windowConfig;
-  windowConfig.title = L"baller";
-  windowConfig.width = 1280;
-  windowConfig.height = 960;
+		baller::VulkanInstance vulkanInstance( "baller", platform->getRequiredInstanceExtensions(), baller::kDebugBuild);
+		auto surface = platform->createSurface(vulkanInstance.getInstance());
+		baller::VulkanDevice vulkanDevice(vulkanInstance.getInstance(), surface);
 
-  if (!platform->createWindow(windowConfig)) {
-    std::cerr << "Failed to create the window." << std::endl;
-    return -1;
-  }
+		std::cout << "baller initialized.\nPress ESC to exit.\n";
+        createSwapChain(vulkanDevice.getPhysicalDevice(), surface, *platform);
+		while (platform->pollEvents())
+		{
+			// Frame rendering will be added here in the next milestone.
+		}
 
-  // =============================================
-  // 2. Create the Vulkan instance.
-  // =============================================
-  baller::VulkanInstance vulkanInstance;
+		// No GPU work is submitted yet. Rendering will require waiting before cleanup.
+		// Automatic cleanup: device, surface, debug messenger, instance, context, window.
+		std::cout << "baller shutting down.\n";
+	}
+	catch (const std::exception& error)
+	{
+		// Stack unwinding releases any resources created before the failure.
+		std::cerr << "Failed to initialize or run baller: " << error.what() << '\n';
+		return EXIT_FAILURE;
+	}
 
-  auto requiredExtensions = platform->getRequiredInstanceExtensions();
-
-  constexpr bool enableValidation = baller::kDebugBuild;
-
-  if (!vulkanInstance.create("baller", requiredExtensions, enableValidation)) {
-    std::cerr << "Failed to create the Vulkan instance." << std::endl;
-    return -1;
-  }
-
-  // =============================================
-  // 3. Create the Vulkan surface.
-  // =============================================
-  VkSurfaceKHR surface = platform->createSurface(vulkanInstance.getInstance());
-  if (surface == VK_NULL_HANDLE) {
-    std::cerr << "Failed to create the Vulkan surface." << std::endl;
-    return -1;
-  }
-
-  std::cout << "========================================" << std::endl;
-  std::cout << "baller initialized." << std::endl;
-  std::cout << "Press ESC to exit." << std::endl;
-  std::cout << "========================================" << std::endl;
-
-  // =============================================
-  // 4. Run the main loop.
-  // =============================================
-  while (platform->pollEvents()) {
-    // Frame rendering will be added here in the next milestone.
-  }
-
-  // =============================================
-  // 5. Release resources in reverse creation order.
-  // =============================================
-  // Destroy the surface.
-  if (surface != VK_NULL_HANDLE) {
-    vkDestroySurfaceKHR(vulkanInstance.getInstance(), surface, nullptr);
-    std::cout << "Vulkan surface destroyed." << std::endl;
-  }
-
-  // VulkanInstance releases its resources in its destructor.
-  // Platform destroys the window in its destructor.
-
-  std::cout << "baller shutting down." << std::endl;
-  return 0;
+	return EXIT_SUCCESS;
 }

@@ -1,55 +1,48 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
-#include <vulkan/vulkan.h>
-
+#include <vulkan/vulkan_raii.hpp>
 
 namespace baller {
 
 inline constexpr uint32_t kRequiredVulkanVersion = VK_API_VERSION_1_4;
 
-/// Owns a Vulkan instance and its validation messenger.
+/// Owns the Vulkan loader context, instance, and validation messenger.
 class VulkanInstance {
 public:
-  VulkanInstance() = default;
-  ~VulkanInstance();
+  /// Create the instance, or throw if initialization fails.
+  VulkanInstance(const std::string &appName,
+                 const std::vector<const char *> &requiredExtensions,
+                 bool enableValidation = true);
+  ~VulkanInstance() = default;
 
-  // Non-copyable and non-movable: this object owns Vulkan handles.
+  // Keep the owner stable while surfaces and devices borrow its instance.
   VulkanInstance(const VulkanInstance &) = delete;
   VulkanInstance &operator=(const VulkanInstance &) = delete;
+  VulkanInstance(VulkanInstance &&) = delete;
+  VulkanInstance &operator=(VulkanInstance &&) = delete;
 
-  /// Create the Vulkan instance.
-  /// @param appName Application name.
-  /// @param requiredExtensions Required instance extensions, including platform surface extensions.
-  /// @param enableValidation Whether to enable validation layers.
-  bool create(const std::string &appName,
-              const std::vector<const char *> &requiredExtensions,
-              bool enableValidation = true);
-
-  /// Release owned Vulkan resources.
-  void destroy();
-
-  VkInstance getInstance() const { return m_instance; }
-  bool isValidationEnabled() const { return m_validationEnabled; }
+  /// Borrow the instance. All child objects must be destroyed before this owner.
+  const vk::raii::Instance &getInstance() const noexcept { return m_instance; }
+  bool isValidationEnabled() const noexcept { return m_validationEnabled; }
 
 private:
-  /// Check whether all requested validation layers are available.
   bool checkValidationLayerSupport() const;
 
-  /// Set up the debug messenger.
-  void setupDebugMessenger();
-  void destroyDebugMessenger();
-
-  /// Forward Vulkan validation messages to the application log.
+  /// Vulkan invokes this callback through its C ABI.
   static VKAPI_ATTR VkBool32 VKAPI_CALL
   debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                 VkDebugUtilsMessageTypeFlagsEXT messageType,
-                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-                void *pUserData);
+                const VkDebugUtilsMessengerCallbackDataEXT *callbackData,
+                void *userData) noexcept;
 
-  VkInstance m_instance = VK_NULL_HANDLE;
-  VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
+  // Members are destroyed in reverse declaration order. The loader outlives
+  // the instance, and the instance outlives its debug messenger.
+  vk::raii::Context m_context;
+  vk::raii::Instance m_instance{nullptr};
+  vk::raii::DebugUtilsMessengerEXT m_debugMessenger{nullptr};
   bool m_validationEnabled = false;
 
   static const std::vector<const char *> s_validationLayers;

@@ -2,11 +2,11 @@
 
 ### Simple. Fast. Vulkan-oriented 2D engine.
 
-**C++17 / Vulkan 1.4 / Slang / Windows**
+**C++20 / Vulkan 1.4 / Vulkan-Hpp RAII / Slang / Windows**
 
 A solo engine project built from the first pixel up. Baller aims for a small, readable codebase, efficient sprite rendering, and a playable 2D demo backed by performance measurements.
 
-**Status: early development.** Window and Vulkan instance setup are in place. Shaders compile at build time; the first rendered triangle is the next milestone. Speed is a design goal, with benchmarks still ahead.
+**Status: early development.** Window setup, GPU selection, and logical device creation are in place. Shaders compile at build time; the first rendered triangle is the next milestone. Speed is a design goal, with benchmarks still ahead.
 
 [Get started](#get-started) · [Shaders](#shaders) · [Roadmap](#roadmap)
 
@@ -16,10 +16,13 @@ A solo engine project built from the first pixel up. Baller aims for a small, re
 
 - Win32 window creation and event handling.
 - Vulkan 1.4 instance setup, loader version checks, validation layers, and surface creation.
+- GPU selection with Vulkan version, graphics/present queues, swapchain support, and feature checks.
+- Logical device creation and graphics/present queue retrieval, including separate queue families.
+- Vulkan-Hpp `vk::raii` ownership for the loader context, instance, debug messenger, surface, and device.
 - Slang vertex and fragment shaders compiled to SPIR-V through CMake.
 - Visual Studio presets for Windows x64 Debug and Release builds.
 
-GPU selection, the logical device, swapchain, and graphics pipeline are still to come. The current application opens a window; it does not render the triangle yet.
+The swapchain and graphics pipeline are still to come. The current application opens a window and initializes a suitable GPU; it does not render the triangle yet. Selection uses the first GPU that meets all requirements.
 
 ## Get started
 
@@ -31,7 +34,7 @@ GPU selection, the logical device, swapchain, and graphics pipeline are still to
   - MSVC x64/x86 build tools.
   - Windows 10 or Windows 11 SDK.
   - C++ CMake tools for Windows: CMake 3.24+ and Ninja.
-- [Vulkan SDK](https://vulkan.lunarg.com/) 1.4+ with the **Slang compiler** (`slangc.exe`).
+- [Vulkan SDK](https://vulkan.lunarg.com/) 1.4+ with **Vulkan-Hpp headers** and the **Slang compiler** (`slangc.exe`).
 - Git. CMake fetches GLM 1.0.1 on the first configure if no installed GLM package is found.
 
 Restart Visual Studio after installing the Vulkan SDK so it picks up `VULKAN_SDK`. The SDK version and the GPU driver's supported Vulkan version are separate requirements.
@@ -82,6 +85,22 @@ out/build/windows-debug/bin/Debug/
 
 Release outputs go to `out/build/windows-release/bin/Release/`. Solution builds use `out/build/vs2026/bin/<Config>/`.
 
+## Vulkan ownership
+
+Baller uses C++20 and `<vulkan/vulkan_raii.hpp>` through ordinary headers.
+The Vulkan SDK supplies Vulkan-Hpp; no separate package or C++ module setup is needed.
+
+- `VulkanInstance` owns a `vk::raii::Context`, `vk::raii::Instance`, and `vk::raii::DebugUtilsMessengerEXT`.
+- `Platform::createSurface()` returns an owning `vk::raii::SurfaceKHR`.
+- `VulkanDevice` stores the selected physical device, owns the logical device, and keeps graphics/present queue wrappers. Queue resources belong to the logical device.
+- Queue requests are deduplicated when graphics and presentation use the same family; each requested family provides queue index zero.
+- `getInstance()` returns a borrowed reference for creating child objects.
+- Initialization errors propagate as exceptions to `main`, where they are logged.
+- Resources are destroyed automatically in reverse declaration order: queue wrappers and logical device, surface, debug messenger, instance, context, then window.
+
+Parents must outlive their children. RAII handles destruction, but does not wait for GPU work to finish. No work is submitted yet; GPU completion must be handled before resource destruction when rendering is added.
+The validation callback retains Vulkan's C ABI, while object creation and ownership use Vulkan-Hpp.
+
 ## Shaders
 
 One Slang source. Two entry points. Two SPIR-V modules.
@@ -99,7 +118,7 @@ The build targets **SPIR-V 1.6** and preserves entry point names with `-fvk-use-
 - **Build failures:** shader errors fail the build.
 - **Runtime:** Slang is used only at build time; Baller does not link its runtime library.
 
-The current compiler emits the `DrawParameters` capability for `SV_VertexID`. Device initialization must query and enable `VkPhysicalDeviceVulkan11Features::shaderDrawParameters`. It must also check the physical device's Vulkan version and enable the rendering features it uses; instance creation alone does not do this.
+The current compiler emits the `DrawParameters` capability for `SV_VertexID`. Device initialization checks and enables `vk::PhysicalDeviceVulkan11Features::shaderDrawParameters`, plus Vulkan 1.3 `dynamicRendering` and `synchronization2` for the upcoming renderer. It also requires a Vulkan 1.4 physical device, `VK_KHR_swapchain`, and nonempty surface format and present mode lists. The swapchain itself is not created yet.
 
 ### Add a shader
 
@@ -120,7 +139,7 @@ cmake --preset windows-debug -DBALLER_SLANGC_EXECUTABLE=C:/tools/slang/bin/slang
 
 - [x] Windows foundation and Vulkan 1.4 instance setup.
 - [x] Slang shader build pipeline.
-- [ ] Device selection and graphics/present queues.
+- [x] Device selection and graphics/present queues.
 - [ ] Swapchain, command buffers, frame synchronization, and a clear color.
 - [ ] First triangle through a Slang graphics pipeline.
 - [ ] Vertex buffers, textured sprites, and an orthographic camera.
@@ -132,6 +151,7 @@ A DX12 backend is a possible follow-up after the Vulkan demo is complete.
 
 ## References
 
+- [Vulkan-Hpp RAII programming guide](https://github.com/KhronosGroup/Vulkan-Hpp/blob/main/docs/VkRaiiProgrammingGuide.md)
 - [Vulkan versions and porting guide](https://docs.vulkan.org/guide/latest/versions.html)
 - [Slang compiler options](https://docs.shader-slang.org/en/stable/external/slang/docs/command-line-slangc-reference.html)
 - [Visual Studio CMake Presets](https://learn.microsoft.com/en-us/cpp/build/cmake-presets-vs)

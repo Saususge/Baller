@@ -42,8 +42,12 @@ add_executable(baller
     src/platform/platform_win32.cpp
     src/renderer/vk_instance.hpp
     src/renderer/vk_instance.cpp
+    src/renderer/vk_queue_families.hpp
+    src/renderer/vk_queue_families.cpp
+    src/renderer/vk_device.hpp
+    src/renderer/vk_device.cpp
 )
-target_compile_features(baller PRIVATE cxx_std_17)
+target_compile_features(baller PRIVATE cxx_std_20)
 set_target_properties(baller PROPERTIES CXX_EXTENSIONS OFF)
 target_include_directories(baller PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_definitions(baller PRIVATE

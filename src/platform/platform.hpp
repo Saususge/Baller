@@ -1,14 +1,13 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include <windows.h>
 
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_raii.hpp>
 
 namespace baller {
 
@@ -56,8 +55,9 @@ public:
   /// Return the instance extensions required for surface creation.
   virtual std::vector<const char *> getRequiredInstanceExtensions() const = 0;
 
-  /// Create a Vulkan surface for the window.
-  virtual VkSurfaceKHR createSurface(VkInstance instance) const = 0;
+  /// Return an owning surface. Destroy it before the instance and window.
+  virtual vk::raii::SurfaceKHR
+  createSurface(const vk::raii::Instance &instance) const = 0;
 
   /// Create the platform implementation.
   static std::unique_ptr<Platform> create();

@@ -2,7 +2,6 @@
 
 #include "platform.hpp"
 #include <iostream>
-#include <stdexcept>
 
 namespace baller {
 
@@ -102,18 +101,11 @@ public:
     };
   }
 
-  VkSurfaceKHR createSurface(VkInstance instance) const override {
-    VkWin32SurfaceCreateInfoKHR createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    createInfo.hwnd = m_hwnd;
-    createInfo.hinstance = m_wndClass.hInstance;
-
-    VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (vkCreateWin32SurfaceKHR(instance, &createInfo, nullptr, &surface) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("Failed to create the Win32 Vulkan surface.");
-    }
-
+  vk::raii::SurfaceKHR
+  createSurface(const vk::raii::Instance &instance) const override {
+    vk::Win32SurfaceCreateInfoKHR createInfo;
+    createInfo.setHwnd(m_hwnd).setHinstance(m_wndClass.hInstance);
+    auto surface = instance.createWin32SurfaceKHR(createInfo);
     std::cout << "Win32 Vulkan surface created." << std::endl;
     return surface;
   }
@@ -122,6 +114,10 @@ private:
   static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam,
                                   LPARAM lParam) {
     switch (msg) {
+    case WM_CLOSE:
+      // Leave the window alive until Vulkan child resources have been released.
+      PostQuitMessage(0);
+      return 0;
     case WM_KEYDOWN:
       if (wParam == VK_ESCAPE) {
         PostQuitMessage(0);
